@@ -129,79 +129,96 @@ static std::vector<Position> find_path_sma_star(const char *input, size_t width,
     checkNeighbour({ curPos.x - 1, curPos.y + 0 });
     checkNeighbour({ curPos.x + 0, curPos.y + 1 });
     checkNeighbour({ curPos.x + 0, curPos.y - 1 });
-
-
-    if (openList.size() > max_size)
-    {
-      size_t bestIdx = 0;
-      float bestScore = getF(closedList[0]);
-      for (size_t i = 1; i < closedList.size(); ++i)
-      {
-        float score = getF(closedList[i]);
-        if (score < bestScore)
-        {
-          bestIdx = i;
-          bestScore = score;
-        }
-      }
-      return reconstruct_path(prev, closedList[bestIdx], width);
-      printf("Delete from closedList \n");
-      
-      size_t badIdx = 0;
-      float badScore = getF(closedList[0]);
-      for (size_t i = 1; i < closedList.size(); ++i)
-      {
-        float score = getF(closedList[i]);
-        if (score > badScore)
-        {
-          badIdx = i;
-          badScore = score;
-        }
-      }
-      Position badPos = closedList[badIdx];
-      size_t prevIdx = coord_to_idx(badPos.x, badPos.y, width);
-      bool found = std::find(openList.begin(), openList.end(), prev[prevIdx]) != openList.end();
-      if (!found)
-      {
-        //openList.emplace_back(prev[prevIdx]);
-        //prev[prevIdx] = {-1, -1};
-      }
-        
-      
-      closedList.erase(closedList.begin() + badIdx);
-    }
   }
 
   return std::vector<Position>();
 }
 
+static std::vector<Position> openListAra = {};
+static std::vector<float> gAra;
+std::vector<Position> prevAra;
+std::vector<Position> visited;
 static std::vector<Position> find_path_ara_star(const char *input, size_t width, size_t height, Position from, Position to, float epsilon)
 {
   if (from.x < 0 || from.y < 0 || from.x >= int(width) || from.y >= int(height))
     return std::vector<Position>();
-  size_t inpSize = width * height;
 
-  std::vector<float> g(inpSize, std::numeric_limits<float>::max());
-  std::vector<float> f(inpSize, std::numeric_limits<float>::max());
-  std::vector<Position> prev(inpSize, { -1,-1 });
-
-  auto getG = [&](Position p) -> float { return g[coord_to_idx(p.x, p.y, width)]; };
-  auto getF = [&](Position p) -> float { return f[coord_to_idx(p.x, p.y, width)]; };
-
+  auto getG = [&](Position p) -> float { return gAra[coord_to_idx(p.x, p.y, width)]; };
   auto heuristic = [](Position lhs, Position rhs) -> float
   {
     return sqrtf(square(float(lhs.x - rhs.x)) + square(float(lhs.y - rhs.y)));
   };
 
-  g[coord_to_idx(from.x, from.y, width)] = 0;
-  f[coord_to_idx(from.x, from.y, width)] = heuristic(from, to);
+  auto fValue = [&](Position p) -> float { return getG(p) + epsilon * heuristic(p, to); };
 
-  std::vector<Position> openList = { from };
   std::vector<Position> closedList;
+  std::vector<Position> incons;
 
-  while (!openList.empty())
+  while (!openListAra.empty())
   {
-
+    size_t bestIdx = 0;
+    float bestScore = fValue(openListAra[0]);
+    for (size_t i = 1; i < openListAra.size(); ++i)
+    {
+      float score = fValue(openListAra[i]);
+      if (score < bestScore)
+      {
+        bestIdx = i;
+        bestScore = score;
+      }
+    }
+    if (fValue(to) > fValue(openListAra[bestIdx]))
+    {
+      Position curPos = openListAra[bestIdx];
+      visited.push_back(curPos);
+      openListAra.erase(openListAra.begin() + bestIdx);
+      closedList.emplace_back(curPos);
+      auto checkNeighbour = [&](Position p)
+      {
+        // out of bounds
+        if (p.x < 0 || p.y < 0 || p.x >= int(width) || p.y >= int(height))
+          return;
+        size_t idx = coord_to_idx(p.x, p.y, width);
+        // not empty
+        if (input[idx] == '#')
+          return;
+        float weight = input[idx] == 'o' ? 10.f : 1.f;
+        float gScore = getG(curPos) + 1.f * weight; // we're exactly 1 unit away
+        if (gScore < getG(p))
+        {
+          prevAra[idx] = curPos;
+          gAra[idx] = gScore;
+          bool found = std::find(closedList.begin(), closedList.end(), p) != closedList.end();
+          if (!found)
+          {
+            bool found = std::find(openListAra.begin(), openListAra.end(), p) != openListAra.end();
+            if (!found)
+              openListAra.emplace_back(p);
+          }
+          else
+          {
+            bool found = std::find(incons.begin(), incons.end(), p) != incons.end();
+            if (!found)
+              incons.emplace_back(p);
+          }
+        }
+      };
+      checkNeighbour({ curPos.x + 1, curPos.y + 0 });
+      checkNeighbour({ curPos.x - 1, curPos.y + 0 });
+      checkNeighbour({ curPos.x + 0, curPos.y + 1 });
+      checkNeighbour({ curPos.x + 0, curPos.y - 1 });
+    }
+    else
+    {
+      for (int i = 0; i < incons.size(); ++i)
+      {
+        bool found = std::find(openListAra.begin(), openListAra.end(), incons[i]) != openListAra.end();
+        if (!found)
+          openListAra.emplace_back(incons[i]);
+      }
+      incons.clear();
+      return reconstruct_path(prevAra, to, width);
+    }
   }
 
   return std::vector<Position>();
@@ -250,8 +267,9 @@ static std::vector<Position> find_path_a_star(const char *input, size_t width, s
     openList.erase(openList.begin() + bestIdx);
     if (std::find(closedList.begin(), closedList.end(), curPos) != closedList.end())
       continue;
+
     size_t idx = coord_to_idx(curPos.x, curPos.y, width);
-    DrawPixel(curPos.x, curPos.y, Color{uint8_t(g[idx]), uint8_t(g[idx]), 0, 100});
+    DrawPixel(curPos.x, curPos.y, Color{ uint8_t(g[idx]), uint8_t(g[idx]), 0, 100 });
     closedList.emplace_back(curPos);
     auto checkNeighbour = [&](Position p)
     {
@@ -283,12 +301,44 @@ static std::vector<Position> find_path_a_star(const char *input, size_t width, s
   return std::vector<Position>();
 }
 
+constexpr float eps_def = 5.0f;
+constexpr float eps_step = 0.5f;
+static float eps = eps_def;
+static int next = 0;
+static std::vector<Position> lastPath;
 void draw_nav_data(const char *input, size_t width, size_t height, Position from, Position to)
 {
   draw_nav_grid(input, width, height);
   //std::vector<Position> path = find_path_a_star(input, width, height, from, to);
-  std::vector<Position> path = find_path_sma_star(input, width, height, from, to, 20);
-  draw_path(path);
+  //std::vector<Position> path = find_path_sma_star(input, width, height, from, to, 20);
+  //draw_path(path);
+  
+  --next;
+  if (next < 0)
+  {
+    if (eps < 1.f || openListAra.empty())
+    {
+      eps = eps_def;
+      openListAra = { from };
+      size_t inpSize = width * height;
+      gAra.clear();
+      gAra.resize(inpSize, std::numeric_limits<float>::max());
+      gAra[coord_to_idx(from.x, from.y, width)] = 0;
+      prevAra.clear();
+      prevAra.resize(inpSize, { -1,-1 });
+    }
+      
+    next = 30;
+    eps -= eps_step;
+    visited.clear();
+    lastPath = find_path_ara_star(input, width, height, from, to, eps);
+  }
+  for (int i = 0; i < visited.size(); ++i)
+  {
+    size_t idx = coord_to_idx(visited[i].x, visited[i].y, width);
+    DrawPixel(visited[i].x, visited[i].y, Color{ uint8_t(gAra[idx]), uint8_t(gAra[idx]), 0, 100 });
+  }
+  draw_path(lastPath);
 }
 
 int main(int /*argc*/, const char ** /*argv*/)
@@ -335,11 +385,27 @@ int main(int /*argc*/, const char ** /*argv*/)
     {
       Position &target = from;
       target = p;
+      eps = eps_def;
+      openListAra = { from };
+      size_t inpSize = dungWidth * dungHeight;
+      gAra.clear();
+      gAra.resize(inpSize, std::numeric_limits<float>::max());
+      gAra[coord_to_idx(from.x, from.y, dungWidth)] = 0;
+      prevAra.clear();
+      prevAra.resize(inpSize, { -1,-1 });
     }
     else if (IsMouseButtonPressed(1))
     {
       Position &target = to;
       target = p;
+      eps = eps_def;
+      openListAra = { from };
+      size_t inpSize = dungWidth * dungHeight;
+      gAra.clear();
+      gAra.resize(inpSize, std::numeric_limits<float>::max());
+      gAra[coord_to_idx(from.x, from.y, dungWidth)] = 0;
+      prevAra.clear();
+      prevAra.resize(inpSize, { -1,-1 });
     }
     if (IsKeyPressed(KEY_SPACE))
     {
