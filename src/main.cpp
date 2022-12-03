@@ -42,6 +42,171 @@ static std::vector<Position> reconstruct_path(std::vector<Position> prev, Positi
   return res;
 }
 
+static std::vector<Position> find_path_sma_star(const char *input, size_t width, size_t height, Position from, Position to, int max_size)
+{
+  if (from.x < 0 || from.y < 0 || from.x >= int(width) || from.y >= int(height))
+    return std::vector<Position>();
+  size_t inpSize = width * height;
+
+  std::vector<float> g(inpSize, std::numeric_limits<float>::max());
+  std::vector<float> f(inpSize, std::numeric_limits<float>::max());
+  std::vector<Position> prev(inpSize, { -1,-1 });
+
+  auto getG = [&](Position p) -> float { return g[coord_to_idx(p.x, p.y, width)]; };
+  auto getF = [&](Position p) -> float { return f[coord_to_idx(p.x, p.y, width)]; };
+
+  auto heuristic = [](Position lhs, Position rhs) -> float
+  {
+    return sqrtf(square(float(lhs.x - rhs.x)) + square(float(lhs.y - rhs.y)));
+  };
+
+  g[coord_to_idx(from.x, from.y, width)] = 0;
+  f[coord_to_idx(from.x, from.y, width)] = heuristic(from, to);
+
+  std::vector<Position> openList = { from };
+  std::vector<Position> closedList;
+
+  while (!openList.empty())
+  {
+    size_t bestIdx = 0;
+    float bestScore = getF(openList[0]);
+    for (size_t i = 1; i < openList.size(); ++i)
+    {
+      float score = getF(openList[i]);
+      if (score < bestScore)
+      {
+        bestIdx = i;
+        bestScore = score;
+      }
+    }
+    if (openList[bestIdx] == to)
+      return reconstruct_path(prev, to, width);
+    Position curPos = openList[bestIdx];
+    openList.erase(openList.begin() + bestIdx);
+    if (std::find(closedList.begin(), closedList.end(), curPos) != closedList.end())
+      continue;
+    size_t idx = coord_to_idx(curPos.x, curPos.y, width);
+    DrawPixel(curPos.x, curPos.y, Color{ uint8_t(g[idx]), uint8_t(g[idx]), 0, 100 });
+    closedList.emplace_back(curPos);
+    auto checkNeighbour = [&](Position p)
+    {
+      // out of bounds
+      if (p.x < 0 || p.y < 0 || p.x >= int(width) || p.y >= int(height))
+        return;
+      size_t idx = coord_to_idx(p.x, p.y, width);
+      // not empty
+      if (input[idx] == '#')
+        return;
+      float weight = input[idx] == 'o' ? 10.f : 1.f;
+      float gScore = getG(curPos) + 1.f * weight; // we're exactly 1 unit away
+      if (gScore < getG(p))
+      {
+        prev[idx] = curPos;
+        g[idx] = gScore;
+        f[idx] = std::max(getF(curPos), gScore + heuristic(p, to));
+      }
+      bool found = std::find(openList.begin(), openList.end(), p) != openList.end();
+      if (!found)
+        openList.emplace_back(p);
+
+      if (openList.size() > max_size)
+      {
+        size_t badIdx = 0;
+        float badScore = getF(openList[0]);
+        for (size_t i = 1; i < openList.size(); ++i)
+        {
+          float score = getF(openList[i]);
+          if (score > badScore)
+          {
+            badIdx = i;
+            badScore = score;
+          }
+        }
+        openList.erase(openList.begin() + badIdx);
+      }
+    };
+    checkNeighbour({ curPos.x + 1, curPos.y + 0 });
+    checkNeighbour({ curPos.x - 1, curPos.y + 0 });
+    checkNeighbour({ curPos.x + 0, curPos.y + 1 });
+    checkNeighbour({ curPos.x + 0, curPos.y - 1 });
+
+
+    if (openList.size() > max_size)
+    {
+      size_t bestIdx = 0;
+      float bestScore = getF(closedList[0]);
+      for (size_t i = 1; i < closedList.size(); ++i)
+      {
+        float score = getF(closedList[i]);
+        if (score < bestScore)
+        {
+          bestIdx = i;
+          bestScore = score;
+        }
+      }
+      return reconstruct_path(prev, closedList[bestIdx], width);
+      printf("Delete from closedList \n");
+      
+      size_t badIdx = 0;
+      float badScore = getF(closedList[0]);
+      for (size_t i = 1; i < closedList.size(); ++i)
+      {
+        float score = getF(closedList[i]);
+        if (score > badScore)
+        {
+          badIdx = i;
+          badScore = score;
+        }
+      }
+      Position badPos = closedList[badIdx];
+      size_t prevIdx = coord_to_idx(badPos.x, badPos.y, width);
+      bool found = std::find(openList.begin(), openList.end(), prev[prevIdx]) != openList.end();
+      if (!found)
+      {
+        //openList.emplace_back(prev[prevIdx]);
+        //prev[prevIdx] = {-1, -1};
+      }
+        
+      
+      closedList.erase(closedList.begin() + badIdx);
+    }
+  }
+
+  return std::vector<Position>();
+}
+
+static std::vector<Position> find_path_ara_star(const char *input, size_t width, size_t height, Position from, Position to, float epsilon)
+{
+  if (from.x < 0 || from.y < 0 || from.x >= int(width) || from.y >= int(height))
+    return std::vector<Position>();
+  size_t inpSize = width * height;
+
+  std::vector<float> g(inpSize, std::numeric_limits<float>::max());
+  std::vector<float> f(inpSize, std::numeric_limits<float>::max());
+  std::vector<Position> prev(inpSize, { -1,-1 });
+
+  auto getG = [&](Position p) -> float { return g[coord_to_idx(p.x, p.y, width)]; };
+  auto getF = [&](Position p) -> float { return f[coord_to_idx(p.x, p.y, width)]; };
+
+  auto heuristic = [](Position lhs, Position rhs) -> float
+  {
+    return sqrtf(square(float(lhs.x - rhs.x)) + square(float(lhs.y - rhs.y)));
+  };
+
+  g[coord_to_idx(from.x, from.y, width)] = 0;
+  f[coord_to_idx(from.x, from.y, width)] = heuristic(from, to);
+
+  std::vector<Position> openList = { from };
+  std::vector<Position> closedList;
+
+  while (!openList.empty())
+  {
+
+  }
+
+  return std::vector<Position>();
+}
+
 static std::vector<Position> find_path_a_star(const char *input, size_t width, size_t height, Position from, Position to)
 {
   if (from.x < 0 || from.y < 0 || from.x >= int(width) || from.y >= int(height))
@@ -121,14 +286,15 @@ static std::vector<Position> find_path_a_star(const char *input, size_t width, s
 void draw_nav_data(const char *input, size_t width, size_t height, Position from, Position to)
 {
   draw_nav_grid(input, width, height);
-  std::vector<Position> path = find_path_a_star(input, width, height, from, to);
+  //std::vector<Position> path = find_path_a_star(input, width, height, from, to);
+  std::vector<Position> path = find_path_sma_star(input, width, height, from, to, 20);
   draw_path(path);
 }
 
 int main(int /*argc*/, const char ** /*argv*/)
 {
-  int width = 1920;
-  int height = 1080;
+  int width = 1600;
+  int height = 900;
   InitWindow(width, height, "w3 AI MIPT");
 
   const int scrWidth = GetMonitorWidth(0);
