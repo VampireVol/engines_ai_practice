@@ -326,11 +326,12 @@ void draw_nav_data(const char *input, size_t width, size_t height, Position from
       gAra[coord_to_idx(from.x, from.y, width)] = 0;
       prevAra.clear();
       prevAra.resize(inpSize, { -1,-1 });
+      visited.clear();
     }
       
     next = 30;
     eps -= eps_step;
-    visited.clear();
+    
     lastPath = find_path_ara_star(input, width, height, from, to, eps);
   }
   for (int i = 0; i < visited.size(); ++i)
@@ -393,6 +394,7 @@ int main(int /*argc*/, const char ** /*argv*/)
       gAra[coord_to_idx(from.x, from.y, dungWidth)] = 0;
       prevAra.clear();
       prevAra.resize(inpSize, { -1,-1 });
+      visited.clear();
     }
     else if (IsMouseButtonPressed(1))
     {
@@ -406,6 +408,7 @@ int main(int /*argc*/, const char ** /*argv*/)
       gAra[coord_to_idx(from.x, from.y, dungWidth)] = 0;
       prevAra.clear();
       prevAra.resize(inpSize, { -1,-1 });
+      visited.clear();
     }
     if (IsKeyPressed(KEY_SPACE))
     {
